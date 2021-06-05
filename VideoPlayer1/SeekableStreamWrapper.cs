@@ -28,7 +28,9 @@ namespace VideoPlayer1
 
         public override bool CanWrite => false;
 
-        public override long Length => this._innerStream.Length;
+        public override long Length => 21069680;
+
+        //public override long Length => this._innerStream.Length;
 
         public override long Position { get => this._position; set => this.Seek(value, SeekOrigin.Begin); }
 

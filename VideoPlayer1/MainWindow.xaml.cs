@@ -17,6 +17,10 @@ namespace VideoPlayer1
 
         private DispatcherTimer videotimer = new DispatcherTimer();
 
+        private const string SKey = "_?73^?dVT3st5har3";
+        private const string SaltKey = "!2S@LT&KT3st5har3EY";
+        private const int Iterations = 1042; // Recommendation is >= 1000
+
         public MainWindow()
         {
             InitializeComponent();
@@ -33,12 +37,25 @@ namespace VideoPlayer1
             var streamWrapper = new SeekableStreamWrapper(() =>
             {
                 FileStream.Seek(0, SeekOrigin.Begin);
-                RijndaelManaged AES = new RijndaelManaged();
-                SHA256Cng SHA256 = new SHA256Cng();
+                //RijndaelManaged AES = new RijndaelManaged();
+                //SHA256Cng SHA256 = new SHA256Cng();
 
-                AES.Key = SHA256.ComputeHash(Encoding.ASCII.GetBytes("U[#x5:jg0$e-^etBx#MjWH5Zu_ndd9"));
-                AES.Mode = CipherMode.ECB;
-                return new CryptoStream(FileStream, AES.CreateDecryptor(), CryptoStreamMode.Read, true);
+                //AES.Key = SHA256.ComputeHash(Encoding.ASCII.GetBytes("U[#x5:jg0$e-^etBx#MjWH5Zu_ndd9"));
+                //AES.Mode = CipherMode.ECB;
+                //return new CryptoStream(FileStream, AES.CreateDecryptor(), CryptoStreamMode.Read, true);
+
+                var aes = new AesManaged();
+                aes.BlockSize = aes.LegalBlockSizes[0].MaxSize;
+                aes.KeySize = aes.LegalKeySizes[0].MaxSize;
+                var salt = Encoding.ASCII.GetBytes(SaltKey);
+                var key = new Rfc2898DeriveBytes(SKey, salt, Iterations);
+                aes.Key = key.GetBytes(aes.KeySize / 8);
+                aes.IV = key.GetBytes(aes.BlockSize / 8);
+                aes.Mode = CipherMode.ECB;
+                ICryptoTransform transform = aes.CreateDecryptor(aes.Key, aes.IV);
+
+                return new CryptoStream(FileStream, aes.CreateDecryptor(), CryptoStreamMode.Read, true);
+
             });
 
             _mediaPlayer = new MediaPlayer(_libVLC);
@@ -128,5 +145,81 @@ namespace VideoPlayer1
             _mediaPlayer.Time = (long)sliderVideo.Value;
         }
 
+        private void btnSelect_Click(object sender, RoutedEventArgs e)
+        {
+            OpenFileDialog o = new OpenFileDialog();
+            if (o.ShowDialog() == true)
+            {
+                txtBFilePath.Text = o.FileName;
+                
+            }
+        }
+
+        private void btnEnc_Click(object sender, RoutedEventArgs e)
+        {
+            var dest = Path.GetDirectoryName(txtBFilePath.Text);
+
+            EncryptFile(txtBFilePath.Text, dest + "\\test.mp4");
+
+            //DecryptFile(dest + "\\test.mp4", dest + "\\out.mp4");
+        }
+
+
+        public static void EncryptFile(string srcFilename, string destFilename)
+        {
+            var aes = new AesManaged();
+            aes.BlockSize = aes.LegalBlockSizes[0].MaxSize;
+            aes.KeySize = aes.LegalKeySizes[0].MaxSize;
+            var salt = Encoding.ASCII.GetBytes(SaltKey);
+            var key = new Rfc2898DeriveBytes(SKey, salt, Iterations);
+            aes.Key = key.GetBytes(aes.KeySize / 8);
+            aes.IV = key.GetBytes(aes.BlockSize / 8);
+            aes.Mode = CipherMode.ECB;
+            ICryptoTransform transform = aes.CreateEncryptor(aes.Key, aes.IV);
+            using (var dest = new FileStream(destFilename, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                using (var cryptoStream = new CryptoStream(dest, transform, CryptoStreamMode.Write))
+                {
+                    using (var source = new FileStream(srcFilename, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    {
+                        source.CopyTo(cryptoStream);
+                    }
+                }
+            }
+
+            MessageBox.Show("Encryption Done");
+        }
+
+
+        public static void DecryptFile(string srcFilename, string destFilename)
+        {
+            var aes = new AesManaged();
+            aes.BlockSize = aes.LegalBlockSizes[0].MaxSize;
+            aes.KeySize = aes.LegalKeySizes[0].MaxSize;
+            var salt = Encoding.ASCII.GetBytes(SaltKey);
+            var key = new Rfc2898DeriveBytes(SKey, salt, Iterations);
+            aes.Key = key.GetBytes(aes.KeySize / 8);
+            aes.IV = key.GetBytes(aes.BlockSize / 8);
+            aes.Mode = CipherMode.ECB;
+            ICryptoTransform transform = aes.CreateDecryptor(aes.Key, aes.IV);
+
+            using (var dest = new FileStream(destFilename, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                using (var cryptoStream = new CryptoStream(dest, transform, CryptoStreamMode.Write))
+                {
+                    try
+                    {
+                        using (var source = new FileStream(srcFilename, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            source.CopyTo(cryptoStream);
+                        }
+                    }
+                    catch (CryptographicException exception)
+                    {
+                        throw new ApplicationException("Decryption failed.", exception);
+                    }
+                }
+            }
+        }
     }
 }
